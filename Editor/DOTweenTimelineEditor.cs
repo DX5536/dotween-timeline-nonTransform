@@ -222,6 +222,11 @@ namespace Dott.Editor
                 animation!.Delay = (float)Math.Round(controller.ElapsedTime, 2);
             }
 
+            if (type == typeof(DOTweenAnimation))
+            {
+                ((DOTweenAnimation)component).targetIsSelf = false;
+            }
+
             selection.Set(animation);
         }
 
