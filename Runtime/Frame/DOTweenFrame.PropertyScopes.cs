@@ -24,6 +24,7 @@ namespace Dott
                 FrameProperty.PropertyType.Color => new ColorScope(property),
                 FrameProperty.PropertyType.Active => new ActiveScope(property),
                 FrameProperty.PropertyType.Enabled => new EnabledScope(property),
+                FrameProperty.PropertyType.Rotation => new RotationScope(property),
 
                 _ => throw new System.NotImplementedException()
             };
@@ -260,6 +261,32 @@ namespace Dott
                     default:
                         throw new System.NotImplementedException();
                 }
+            }
+        }
+        
+        private class RotationScope : PropertyScope
+        {
+            private Transform Target => (Transform)Property.Target;
+            private Quaternion startValue;
+
+            public RotationScope(FrameProperty property) : base(property) { }
+
+            public override void Open()
+            {
+                startValue = Target.rotation;
+
+                var endValue = Quaternion.Euler(Property.EndValueVector3);
+                if (Property.IsRelative)
+                {
+                    endValue = startValue * endValue;
+                }
+
+                Target.rotation = endValue;
+            }
+
+            public override void Close()
+            {
+                Target.rotation = startValue;
             }
         }
     }

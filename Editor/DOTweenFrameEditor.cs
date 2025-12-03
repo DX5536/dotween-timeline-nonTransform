@@ -155,6 +155,12 @@ namespace Dott.Editor
                     break;
                 }
 
+                case DOTweenFrame.FrameProperty.PropertyType.Rotation:
+                {
+                    EditorGUILayout.PropertyField(vector3Property, new GUIContent("Rotation"));
+                    break;
+                }
+
                 case DOTweenFrame.FrameProperty.PropertyType.Fade:
                 {
                     EditorGUILayout.PropertyField(floatProperty, new GUIContent("Alpha"));
@@ -188,6 +194,7 @@ namespace Dott.Editor
                 case DOTweenFrame.FrameProperty.PropertyType.Position:
                 case DOTweenFrame.FrameProperty.PropertyType.LocalPosition:
                 case DOTweenFrame.FrameProperty.PropertyType.Scale:
+                case DOTweenFrame.FrameProperty.PropertyType.Rotation:
                     EditorGUI.indentLevel++;
                     EditorGUILayout.PropertyField(current.IsRelativeProp);
                     EditorGUI.indentLevel--;
@@ -254,6 +261,7 @@ namespace Dott.Editor
                 case DOTweenFrame.FrameProperty.PropertyType.LocalPosition:
                 case DOTweenFrame.FrameProperty.PropertyType.Scale:
                 case DOTweenFrame.FrameProperty.PropertyType.Active:
+                case DOTweenFrame.FrameProperty.PropertyType.Rotation:
                     return new Component[] { targetGameObject.GetComponent<Transform>() };
 
                 case DOTweenFrame.FrameProperty.PropertyType.Fade:
