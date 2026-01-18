@@ -1,8 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using DG.DemiEditor;
 using DG.Tweening;
-using JetBrains.Annotations;
 using UnityEngine;
 
 namespace Dott.Editor
@@ -10,17 +10,19 @@ namespace Dott.Editor
     public class DottView
     {
         private bool isTimeDragging;
-        private bool isTweenDragging;
+        private bool isTweenDragPerformed;
+        private IDOTweenAnimation pressedTween;
         private static readonly AddMoreItem[] AddMoreItems = CreateAddMoreItems();
 
         public float TimeScale { get; private set; }
         public bool IsTimeDragging => isTimeDragging;
-        public bool IsTweenDragging => isTweenDragging;
+        public bool IsTweenPressed => pressedTween != null;
         public bool IsSnapping { get; set; }
 
         public event Action<Event> TimeDragEnd;
         public event Action<float> TimeDrag;
-        public event Action<IDOTweenAnimation> TweenSelected;
+        public event Action<IDOTweenAnimation> TweenSelectSet;
+        public event Action<IDOTweenAnimation> TweenSelectToggle;
         public event Action<float> TweenDrag;
         public event Action AddClicked;
         public event Action<Type> AddMore;
@@ -34,7 +36,7 @@ namespace Dott.Editor
         public event Action InspectorUpButtonClicked;
         public event Action InspectorDownButtonClicked;
 
-        public void DrawTimeline(IDOTweenAnimation[] animations, [CanBeNull] IDOTweenAnimation selected, bool isPlaying, float currentPlayingTime, bool isLooping, bool isPaused)
+        public void DrawTimeline(IDOTweenAnimation[] animations, IReadOnlyCollection<IDOTweenAnimation> selectedAnimations, bool isPlaying, float currentPlayingTime, bool isLooping, bool isPaused)
         {
             var rect = DottGUI.GetTimelineControlRect(animations.Length);
 
@@ -44,7 +46,8 @@ namespace Dott.Editor
             TimeScale = CalculateTimeScale(animations);
             var timeDragStarted = false;
             var timeRect = DottGUI.Time(rect, TimeScale, ref isTimeDragging, () => timeDragStarted = true, TimeDragEnd);
-            var tweensRect = DottGUI.Tweens(rect, animations, TimeScale, selected, ref isTweenDragging, TweenSelected);
+            var tweensRect = DottGUI.Tweens(rect, animations, TimeScale, selectedAnimations, IsTweenPressed,
+                animation => OnTweenDown(animation, selectedAnimations), () => OnTweenUp(selectedAnimations));
 
             if (DottGUI.AddButton(rect))
             {
@@ -53,12 +56,14 @@ namespace Dott.Editor
 
             DottGUI.AddMoreButton(rect, AddMoreItems, item => AddMore?.Invoke(item.Type));
 
-            if (selected != null && DottGUI.RemoveButton(rect))
+            var hasSelection = selectedAnimations.Count > 0;
+            if (hasSelection && DottGUI.RemoveButton(rect))
             {
                 RemoveClicked?.Invoke();
             }
 
-            if (selected != null && DottGUI.DuplicateButton(rect))
+            var singleSelection = selectedAnimations.Count == 1;
+            if (singleSelection && DottGUI.DuplicateButton(rect))
             {
                 DuplicateClicked?.Invoke();
             }
@@ -88,13 +93,13 @@ namespace Dott.Editor
                 }
             }
 
-            if (isTweenDragging && selected != null)
+            if (IsTweenPressed)
             {
-                var time = DottGUI.GetScaledTimeUnderMouse(timeRect);
-
                 if (Event.current.type == EventType.MouseDrag)
                 {
+                    var time = DottGUI.GetScaledTimeUnderMouse(timeRect);
                     var rawTime = time / TimeScale;
+                    isTweenDragPerformed = true;
                     TweenDrag?.Invoke(rawTime);
                 }
             }
@@ -130,16 +135,62 @@ namespace Dott.Editor
             if (Event.current.type == EventType.MouseDown)
             {
                 var mousePosition = Event.current.mousePosition;
-                if (selected != null && rect.Contains(mousePosition))
+                if (hasSelection && rect.Contains(mousePosition))
                 {
-                    TweenSelected?.Invoke(null);
+                    TweenSelectSet?.Invoke(null);
                 }
             }
+        }
+
+        private void OnTweenDown(IDOTweenAnimation animation, IReadOnlyCollection<IDOTweenAnimation> selectedAnimations)
+        {
+            isTweenDragPerformed = false;
+            pressedTween = animation;
+
+            if (animation == null)
+            {
+                TweenSelectSet?.Invoke(null);
+                return;
+            }
+
+            if (Event.current.shift)
+            {
+                TweenSelectToggle?.Invoke(animation);
+                return;
+            }
+
+            var alreadySelected = selectedAnimations.Contains(animation);
+            var isGroupSelection = selectedAnimations.Count > 1;
+
+            // Don't deselect others yet if clicking inside a group (to allow group drag)
+            if (!alreadySelected || !isGroupSelection)
+            {
+                TweenSelectSet?.Invoke(animation);
+            }
+        }
+
+        private void OnTweenUp(IReadOnlyCollection<IDOTweenAnimation> selectedAnimations)
+        {
+            var wasSimpleClick = !isTweenDragPerformed && pressedTween != null;
+            var isGroupSelection = selectedAnimations.Count > 1;
+
+            // If it was a click without dragging inside a group, select only this one (deselect others)
+            if (!Event.current.shift && wasSimpleClick && isGroupSelection)
+            {
+                TweenSelectSet?.Invoke(pressedTween);
+            }
+
+            pressedTween = null;
         }
 
         public void DrawInspector(UnityEditor.Editor editor)
         {
             DottGUI.Inspector(editor, InspectorUpButtonClicked, InspectorDownButtonClicked);
+        }
+
+        public void DrawMultiInspector(IReadOnlyCollection<IDOTweenAnimation> animations)
+        {
+            DottGUI.MultiSelectionInspector(animations);
         }
 
         private static float CalculateTimeScale(IDOTweenAnimation[] animations)

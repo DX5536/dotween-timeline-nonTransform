@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using DG.Tweening;
+using JetBrains.Annotations;
 using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
@@ -10,12 +11,21 @@ namespace Dott.Editor
     [CustomEditor(typeof(DOTweenTimeline))]
     public class DOTweenTimelineEditor : UnityEditor.Editor
     {
+        private class DragAnchor
+        {
+            public IDOTweenAnimation Head;
+            public float TimeShift;
+            public float TailTimeShift;
+        }
+
         private DOTweenTimeline Timeline => (DOTweenTimeline)target;
 
         private DottController controller;
         private DottSelection selection;
         private DottView view;
-        private float? dragTweenTimeShift;
+
+        [CanBeNull] private DragAnchor dragAnchor;
+
         private IDOTweenAnimation[] animations;
 
         public override bool RequiresConstantRepaint() => true;
@@ -27,12 +37,16 @@ namespace Dott.Editor
             animations = Timeline.GetComponents<MonoBehaviour>().Select(DottAnimation.FromComponent).Where(animation => animation != null).ToArray();
             selection.Validate(animations);
 
-            view.DrawTimeline(animations, selection.Animation, controller.IsPlaying, controller.ElapsedTime,
+            view.DrawTimeline(animations, selection.SelectedAnimations, controller.IsPlaying, controller.ElapsedTime,
                 controller.Loop, controller.Paused);
 
-            if (selection.Animation != null)
+            if (selection.Count == 1)
             {
                 view.DrawInspector(selection.GetAnimationEditor());
+            }
+            else if (selection.Count > 1)
+            {
+                view.DrawMultiInspector(selection.SelectedAnimations);
             }
 
             if (controller.Paused && Event.current.type == EventType.Repaint)
@@ -41,7 +55,7 @@ namespace Dott.Editor
             }
 
             // Smoother ui updates
-            if (controller.IsPlaying || view.IsTimeDragging || view.IsTweenDragging)
+            if (controller.IsPlaying || view.IsTimeDragging || view.IsTweenPressed)
             {
                 Repaint();
             }
@@ -55,7 +69,9 @@ namespace Dott.Editor
 
             view.IsSnapping = EditorPrefs.GetBool("Dott.Snap", true);
 
-            view.TweenSelected += OnTweenSelected;
+            view.TweenSelectSet += OnTweenSelectSet;
+            view.TweenSelectToggle += OnTweenSelectToggle;
+
             view.TweenDrag += DragSelectedAnimation;
 
             view.TimeDragEnd += OnTimeDragEnd;
@@ -80,7 +96,9 @@ namespace Dott.Editor
 
         private void OnDisable()
         {
-            view.TweenSelected -= OnTweenSelected;
+            view.TweenSelectSet -= OnTweenSelectSet;
+            view.TweenSelectToggle -= OnTweenSelectToggle;
+
             view.TweenDrag -= DragSelectedAnimation;
 
             view.TimeDragEnd -= OnTimeDragEnd;
@@ -138,21 +156,40 @@ namespace Dott.Editor
         private void DragSelectedAnimation(float time)
         {
             // Sometimes (e.g., for Frame) undo is not recorded when dragging, so we force it
-            Undo.RecordObject(selection.Animation.Component, $"Drag {selection.Animation.Label}");
+            foreach (var animation in selection.SelectedAnimations)
+            {
+                Undo.RecordObject(animation.Component, $"Drag {animation.Label}");
+            }
 
-            dragTweenTimeShift ??= time - selection.Animation.Delay;
+            if (dragAnchor == null)
+            {
+                var headAnimation = selection.FindHead();
+                var tailAnimation = selection.FindTail();
+                dragAnchor = new DragAnchor
+                {
+                    Head = headAnimation,
+                    TimeShift = time - headAnimation.Delay,
+                    TailTimeShift = time - tailAnimation.Delay
+                };
+            }
 
-            var delay = time - dragTweenTimeShift.Value;
+            var delay = time - dragAnchor.TimeShift;
+            var tailDelay = time - dragAnchor.TailTimeShift;
+            delay = TrySnapTime(delay, tailDelay, view.TimeScale);
             delay = Mathf.Max(0, delay);
-            delay = TrySnapTime(selection.Animation, delay, view.TimeScale);
             delay = (float)Math.Round(delay, 2);
-            selection.Animation.Delay = delay;
+
+            var delayOffset = delay - dragAnchor.Head.Delay;
+            foreach (var selectedAnimation in selection.SelectedAnimations)
+            {
+                selectedAnimation.Delay += delayOffset;
+            }
 
             // Complete undo record
             Undo.FlushUndoRecordObjects();
         }
 
-        private float TrySnapTime(IDOTweenAnimation target, float newDelay, float timeScale)
+        private float TrySnapTime(float newDelay, float newTailDelay, float timeScale)
         {
             if (!IsSnapActive() || animations.Length < 2)
             {
@@ -161,9 +198,14 @@ namespace Dott.Editor
 
             var snapThreshold = 1f / 40f / timeScale;
             var snapPoints = animations
-                .Where(animation => animation.Component != target.Component)
+                .Where(animation => !selection.SelectedAnimations.Contains(animation))
                 .SelectMany(animation => Enumerable.Empty<float>().Append(animation.Delay).Append(animation.Delay + animation.Duration * Mathf.Max(1, animation.Loops)))
                 .Distinct().ToArray();
+
+            if (snapPoints.Length == 0)
+            {
+                return newDelay;
+            }
 
             var snapTime = snapPoints.OrderBy(snapPoint => Mathf.Abs(snapPoint - newDelay)).First();
             if (Math.Abs(snapTime - newDelay) < snapThreshold)
@@ -171,17 +213,20 @@ namespace Dott.Editor
                 return snapTime;
             }
 
-            if (target.Loops == -1)
+            var tail = selection.FindTail();
+            if (tail.Loops == -1)
             {
                 return newDelay;
             }
 
-            var targetFullDuration = target.Duration * Mathf.Max(1, target.Loops);
-            var newEndTime = newDelay + targetFullDuration;
+            var tailFullDuration = tail.Duration * Mathf.Max(1, tail.Loops);
+            var newEndTime = newTailDelay + tailFullDuration;
             var snapEndTime = snapPoints.OrderBy(snapPoint => Mathf.Abs(snapPoint - newEndTime)).First();
             if (Math.Abs(snapEndTime - newEndTime) < snapThreshold)
             {
-                return snapEndTime - targetFullDuration;
+                var snapTailDelay = snapEndTime - tailFullDuration;
+                var difference = snapTailDelay - newTailDelay;
+                return newDelay + difference;
             }
 
             return newDelay;
@@ -194,13 +239,23 @@ namespace Dott.Editor
             return reverseSnap ? !snapEnabled : snapEnabled;
         }
 
-        private void OnTweenSelected(IDOTweenAnimation animation)
+        private void OnTweenSelectSet(IDOTweenAnimation animation)
         {
+            OnTweenSelectChanged();
             selection.Set(animation);
+        }
+
+        private void OnTweenSelectToggle(IDOTweenAnimation animation)
+        {
+            OnTweenSelectChanged();
+            selection.Toggle(animation);
+        }
+
+        private void OnTweenSelectChanged()
+        {
             // clear focus to correctly update inspector
             GUIUtility.keyboardControl = 0;
-
-            dragTweenTimeShift = null;
+            dragAnchor = null;
         }
 
         private void AddAnimation()
@@ -232,15 +287,36 @@ namespace Dott.Editor
 
         private void Remove()
         {
-            Undo.DestroyObjectImmediate(selection.Animation.Component);
+            if (selection.Count > 1)
+            {
+                Undo.SetCurrentGroupName($"Remove {selection.Count} tweens");
+                var group = Undo.GetCurrentGroup();
+                foreach (var animation in selection.SelectedAnimations)
+                {
+                    Undo.DestroyObjectImmediate(animation.Component);
+                }
+                Undo.CollapseUndoOperations(group);
+            }
+            else
+            {
+                Undo.DestroyObjectImmediate(selection.Animation.Component);
+            }
+
             selection.Clear();
         }
 
         private void Duplicate()
         {
-            Undo.SetCurrentGroupName($"Duplicate {selection.Animation.Label}");
+            if (selection.IsMultiSelection)
+            {
+                return;
+            }
 
-            var source = selection.Animation.Component;
+            var selected = selection.Animation;
+
+            Undo.SetCurrentGroupName($"Duplicate {selected.Label}");
+
+            var source = selected.Component;
 
             var dest = Undo.AddComponent(source.gameObject, source.GetType());
             EditorUtility.CopySerialized(source, dest);
@@ -270,19 +346,31 @@ namespace Dott.Editor
 
         private void MoveSelectedUp()
         {
-            var index = animations.FindIndex(animation => animation.Component == selection.Animation.Component);
+            if (selection.IsMultiSelection)
+            {
+                return;
+            }
+
+            var selected = selection.Animation;
+            var index = animations.FindIndex(animation => animation.Component == selected.Component);
             if (index > 0)
             {
-                ComponentUtility.MoveComponentUp(selection.Animation.Component);
+                ComponentUtility.MoveComponentUp(selected.Component);
             }
         }
 
         private void MoveSelectedDown()
         {
-            var index = animations.FindIndex(animation => animation.Component == selection.Animation.Component);
+            if (selection.IsMultiSelection)
+            {
+                return;
+            }
+
+            var selected = selection.Animation;
+            var index = animations.FindIndex(animation => animation.Component == selected.Component);
             if (index < animations.Length - 1)
             {
-                ComponentUtility.MoveComponentDown(selection.Animation.Component);
+                ComponentUtility.MoveComponentDown(selected.Component);
             }
         }
 

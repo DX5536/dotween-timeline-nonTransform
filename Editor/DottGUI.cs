@@ -1,6 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using DG.DemiEditor;
-using JetBrains.Annotations;
 using UnityEditor;
 using UnityEngine;
 using Random = UnityEngine.Random;
@@ -158,20 +159,18 @@ namespace Dott.Editor
             return time;
         }
 
-        public static Rect Tweens(Rect rect, IDOTweenAnimation[] animations, float timeScale, [CanBeNull] IDOTweenAnimation selected, ref bool isTweenDragging, Action<IDOTweenAnimation> tweenSelected)
+        public static Rect Tweens(Rect rect, IDOTweenAnimation[] animations, float timeScale, IReadOnlyCollection<IDOTweenAnimation> selectedAnimations, bool isTweenDragging, Action<IDOTweenAnimation> tweenMouseDown, Action tweenMouseUp)
         {
             rect = rect.ShiftY(TIMELINE_HEADER_HEIGHT + TIME_HEIGHT).SetHeight(animations.Length * ROW_HEIGHT);
-
-            IDOTweenAnimation startDrag = null;
 
             for (var i = 0; i < animations.Length; i++)
             {
                 var animation = animations[i];
                 var rowRect = new Rect(rect.x, rect.y + i * ROW_HEIGHT, rect.width, ROW_HEIGHT);
-                var isSelected = selected?.Component == animation.Component;
+                var isSelected = selectedAnimations.Contains(animation);
                 var tweenRect = Element(animation, rowRect, isSelected, timeScale);
 
-                ProcessDragEvents(tweenRect, ref isTweenDragging, start: Start, end: null);
+                ProcessDragEvents(tweenRect, ref isTweenDragging, start: Start, end: End);
 
                 var bottomLine = new Rect(rowRect.x, rowRect.y + rowRect.height, rowRect.width, 1);
                 EditorGUI.DrawRect(bottomLine, Color.black);
@@ -179,8 +178,12 @@ namespace Dott.Editor
 
                 void Start()
                 {
-                    startDrag = animation;
-                    tweenSelected?.Invoke(animation);
+                    tweenMouseDown?.Invoke(animation);
+                }
+
+                void End(Event @event)
+                {
+                    tweenMouseUp?.Invoke();
                 }
             }
 
@@ -350,6 +353,48 @@ namespace Dott.Editor
             Splitter(new Color(0.19f, 0.19f, 0.19f, 1.333f));
 
             editor.OnInspectorGUI();
+        }
+
+        public static void MultiSelectionInspector(IReadOnlyCollection<IDOTweenAnimation> animations)
+        {
+            EditorGUILayout.Space();
+
+            Splitter(new Color(0.12f, 0.12f, 0.12f, 1.333f));
+
+            var backgroundRect = GUILayoutUtility.GetRect(1f, 20f);
+            var labelRect = backgroundRect;
+            backgroundRect = ToFullWidth(backgroundRect);
+            EditorGUI.DrawRect(backgroundRect, new Color(0.1f, 0.1f, 0.1f, 0.2f));
+            EditorGUI.LabelField(labelRect, "Inspector", InspectorHeaderStyle);
+
+            Splitter(new Color(0.19f, 0.19f, 0.19f, 1.333f));
+
+            EditorGUILayout.Space(10);
+            var messageStyle = new GUIStyle(EditorStyles.label)
+            {
+                wordWrap = true,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = Color.white.SetAlpha(0.7f) }
+            };
+
+            var message = $"Multiple tweens selected ({animations.Count}):";
+            EditorGUILayout.LabelField(message, messageStyle);
+            EditorGUILayout.Space(5);
+
+            var listStyle = new GUIStyle(EditorStyles.label)
+            {
+                wordWrap = true,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = Color.white.SetAlpha(0.9f) },
+                padding = new RectOffset(20, 0, 2, 2)
+            };
+
+            foreach (var animation in animations)
+            {
+                EditorGUILayout.LabelField($"• {animation.Label}", listStyle);
+            }
+
+            EditorGUILayout.Space(10);
         }
 
         private static void CreateInspectorButtons(Rect backgroundRect, Action onButtonUp, Action onButtonDown)
