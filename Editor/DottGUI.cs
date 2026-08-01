@@ -1,6 +1,6 @@
 using System;
+using System.Collections.Generic;
 using DG.DemiEditor;
-using JetBrains.Annotations;
 using UnityEditor;
 using UnityEngine;
 using Random = UnityEngine.Random;
@@ -158,20 +158,18 @@ namespace Dott.Editor
             return time;
         }
 
-        public static Rect Tweens(Rect rect, IDOTweenAnimation[] animations, float timeScale, [CanBeNull] IDOTweenAnimation selected, ref bool isTweenDragging, Action<IDOTweenAnimation> tweenSelected)
+        public static Rect Tweens(Rect rect, IDOTweenAnimation[] animations, float timeScale, DottSelection selection, ref bool isTweenDragging, Action<IDOTweenAnimation, bool> tweenPressed, Action tweenDragEnd)
         {
             rect = rect.ShiftY(TIMELINE_HEADER_HEIGHT + TIME_HEIGHT).SetHeight(animations.Length * ROW_HEIGHT);
-
-            IDOTweenAnimation startDrag = null;
 
             for (var i = 0; i < animations.Length; i++)
             {
                 var animation = animations[i];
                 var rowRect = new Rect(rect.x, rect.y + i * ROW_HEIGHT, rect.width, ROW_HEIGHT);
-                var isSelected = selected?.Component == animation.Component;
+                var isSelected = selection.Contains(animation);
                 var tweenRect = Element(animation, rowRect, isSelected, timeScale);
 
-                ProcessDragEvents(tweenRect, ref isTweenDragging, start: Start, end: null);
+                ProcessDragEvents(tweenRect, ref isTweenDragging, start: Start, end: End);
 
                 var bottomLine = new Rect(rowRect.x, rowRect.y + rowRect.height, rowRect.width, 1);
                 EditorGUI.DrawRect(bottomLine, Color.black);
@@ -179,8 +177,13 @@ namespace Dott.Editor
 
                 void Start()
                 {
-                    startDrag = animation;
-                    tweenSelected?.Invoke(animation);
+                    tweenPressed?.Invoke(animation, Event.current.shift);
+                }
+
+                // Only the first processed row receives the mouse up, so the drag end must not depend on the row
+                void End(Event _)
+                {
+                    tweenDragEnd?.Invoke();
                 }
             }
 
@@ -335,6 +338,32 @@ namespace Dott.Editor
 
         public static void Inspector(UnityEditor.Editor editor, Action onButtonUp, Action onButtonDown)
         {
+            InspectorHeader(onButtonUp, onButtonDown, buttonsEnabled: true);
+
+            editor.OnInspectorGUI();
+        }
+
+        public static void MultiSelection(IReadOnlyList<IDOTweenAnimation> selected, Action onButtonUp, Action onButtonDown)
+        {
+            // Reordering is not supported for multiple tweens
+            InspectorHeader(onButtonUp, onButtonDown, buttonsEnabled: false);
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField($"Multiple tweens selected ({selected.Count}):", EditorStyles.boldLabel);
+
+            using (new EditorGUI.IndentLevelScope())
+            {
+                foreach (var animation in selected)
+                {
+                    EditorGUILayout.LabelField(animation.Label, MultiSelectionItemStyle);
+                }
+            }
+
+            EditorGUILayout.Space();
+        }
+
+        private static void InspectorHeader(Action onButtonUp, Action onButtonDown, bool buttonsEnabled)
+        {
             EditorGUILayout.Space();
 
             Splitter(new Color(0.12f, 0.12f, 0.12f, 1.333f));
@@ -345,11 +374,12 @@ namespace Dott.Editor
             EditorGUI.DrawRect(backgroundRect, new Color(0.1f, 0.1f, 0.1f, 0.2f));
             EditorGUI.LabelField(labelRect, "Inspector", InspectorHeaderStyle);
 
-            CreateInspectorButtons(backgroundRect, onButtonUp, onButtonDown);
+            using (new EditorGUI.DisabledScope(!buttonsEnabled))
+            {
+                CreateInspectorButtons(backgroundRect, onButtonUp, onButtonDown);
+            }
 
             Splitter(new Color(0.19f, 0.19f, 0.19f, 1.333f));
-
-            editor.OnInspectorGUI();
         }
 
         private static void CreateInspectorButtons(Rect backgroundRect, Action onButtonUp, Action onButtonDown)
@@ -509,6 +539,9 @@ namespace Dott.Editor
             normal = { textColor = new Color(0.6f, 0.6f, 0.6f) },
             fixedWidth = 0, fixedHeight = 0
         };
+
+        // Labels may contain rich text, e.g. "<i>Callback</i>"
+        private static readonly GUIStyle MultiSelectionItemStyle = new(EditorStyles.label) { richText = true };
 
         private static readonly GUIStyle TimelineHeaderStyle = new(EditorStyles.boldLabel)
             { alignment = TextAnchor.MiddleCenter };

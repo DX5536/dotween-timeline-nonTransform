@@ -1,8 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using DG.DemiEditor;
 using DG.Tweening;
-using JetBrains.Annotations;
 using UnityEngine;
 
 namespace Dott.Editor
@@ -20,8 +20,11 @@ namespace Dott.Editor
 
         public event Action<Event> TimeDragEnd;
         public event Action<float> TimeDrag;
-        public event Action<IDOTweenAnimation> TweenSelected;
+
+        /// Animation pressed with the mouse. Null means deselect. The flag is set when the selection modifier is held.
+        public event Action<IDOTweenAnimation, bool> TweenSelected;
         public event Action<float> TweenDrag;
+        public event Action TweenDragEnd;
         public event Action AddClicked;
         public event Action<Type> AddMore;
         public event Action RemoveClicked;
@@ -34,7 +37,7 @@ namespace Dott.Editor
         public event Action InspectorUpButtonClicked;
         public event Action InspectorDownButtonClicked;
 
-        public void DrawTimeline(IDOTweenAnimation[] animations, [CanBeNull] IDOTweenAnimation selected, bool isPlaying, float currentPlayingTime, bool isLooping, bool isPaused)
+        public void DrawTimeline(IDOTweenAnimation[] animations, DottSelection selection, bool isPlaying, float currentPlayingTime, bool isLooping, bool isPaused)
         {
             var rect = DottGUI.GetTimelineControlRect(animations.Length);
 
@@ -44,7 +47,7 @@ namespace Dott.Editor
             TimeScale = CalculateTimeScale(animations);
             var timeDragStarted = false;
             var timeRect = DottGUI.Time(rect, TimeScale, ref isTimeDragging, () => timeDragStarted = true, TimeDragEnd);
-            var tweensRect = DottGUI.Tweens(rect, animations, TimeScale, selected, ref isTweenDragging, TweenSelected);
+            var tweensRect = DottGUI.Tweens(rect, animations, TimeScale, selection, ref isTweenDragging, TweenSelected, TweenDragEnd);
 
             if (DottGUI.AddButton(rect))
             {
@@ -53,12 +56,12 @@ namespace Dott.Editor
 
             DottGUI.AddMoreButton(rect, AddMoreItems, item => AddMore?.Invoke(item.Type));
 
-            if (selected != null && DottGUI.RemoveButton(rect))
+            if (selection.Count > 0 && DottGUI.RemoveButton(rect))
             {
                 RemoveClicked?.Invoke();
             }
 
-            if (selected != null && DottGUI.DuplicateButton(rect))
+            if (selection.Count > 0 && DottGUI.DuplicateButton(rect))
             {
                 DuplicateClicked?.Invoke();
             }
@@ -88,7 +91,7 @@ namespace Dott.Editor
                 }
             }
 
-            if (isTweenDragging && selected != null)
+            if (isTweenDragging && selection.Count > 0)
             {
                 var time = DottGUI.GetScaledTimeUnderMouse(timeRect);
 
@@ -127,12 +130,13 @@ namespace Dott.Editor
                 PreviewDisabled?.Invoke();
             }
 
-            if (Event.current.type == EventType.MouseDown)
+            // Keep the selection when the modifier is held, so a missed click does not reset it
+            if (Event.current.type == EventType.MouseDown && !Event.current.shift)
             {
                 var mousePosition = Event.current.mousePosition;
-                if (selected != null && rect.Contains(mousePosition))
+                if (selection.Count > 0 && rect.Contains(mousePosition))
                 {
-                    TweenSelected?.Invoke(null);
+                    TweenSelected?.Invoke(null, false);
                 }
             }
         }
@@ -140,6 +144,11 @@ namespace Dott.Editor
         public void DrawInspector(UnityEditor.Editor editor)
         {
             DottGUI.Inspector(editor, InspectorUpButtonClicked, InspectorDownButtonClicked);
+        }
+
+        public void DrawMultiSelection(IReadOnlyList<IDOTweenAnimation> selected)
+        {
+            DottGUI.MultiSelection(selected, InspectorUpButtonClicked, InspectorDownButtonClicked);
         }
 
         private static float CalculateTimeScale(IDOTweenAnimation[] animations)

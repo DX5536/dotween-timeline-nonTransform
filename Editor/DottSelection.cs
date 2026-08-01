@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
@@ -5,36 +6,61 @@ namespace Dott.Editor
 {
     public class DottSelection
     {
-        private static IDOTweenAnimation animation;
+        private static readonly List<IDOTweenAnimation> Animations = new();
         private UnityEditor.Editor editor;
 
-        public IDOTweenAnimation Animation => animation;
+        /// Last selected animation. Only it is shown in the inspector.
+        public IDOTweenAnimation Animation => Animations.Count > 0 ? Animations[^1] : null;
+        public IReadOnlyList<IDOTweenAnimation> All => Animations;
+        public int Count => Animations.Count;
+
+        public bool Contains(IDOTweenAnimation animation) => Animations.Contains(animation);
 
         public void Validate(IDOTweenAnimation[] animations)
         {
-            if (animation != null && !animations.Contains(animation))
-            {
-                Clear();
-            }
+            Animations.RemoveAll(animation => !animations.Contains(animation));
         }
 
         public void Set(IDOTweenAnimation animation)
         {
-            DottSelection.animation = animation;
+            Animations.Clear();
+            if (animation != null)
+            {
+                Animations.Add(animation);
+            }
         }
 
-        public void Clear() => Set(null);
+        public void Set(IEnumerable<IDOTweenAnimation> animations)
+        {
+            Animations.Clear();
+            Animations.AddRange(animations.Where(animation => animation != null));
+        }
+
+        /// Removes the animation if it is already selected, adds it otherwise.
+        public void Toggle(IDOTweenAnimation animation)
+        {
+            if (animation == null) { return; }
+
+            if (!Animations.Remove(animation))
+            {
+                Animations.Add(animation);
+            }
+        }
+
+        public void Clear() => Animations.Clear();
 
         public UnityEditor.Editor GetAnimationEditor()
         {
+            var animation = Animation;
+            if (animation == null)
+            {
+                DisposeEditor();
+                return null;
+            }
+
             if (editor != null && editor.target != animation.Component)
             {
                 DisposeEditor();
-            }
-
-            if (animation == null)
-            {
-                return null;
             }
 
             if (editor == null)
@@ -47,14 +73,13 @@ namespace Dott.Editor
 
         public void Dispose()
         {
-            if (editor != null)
-            {
-                DisposeEditor();
-            }
+            DisposeEditor();
         }
 
         private void DisposeEditor()
         {
+            if (editor == null) { return; }
+
             Object.DestroyImmediate(editor);
             editor = null;
         }
