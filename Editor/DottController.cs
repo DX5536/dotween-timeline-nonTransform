@@ -12,6 +12,7 @@ namespace Dott.Editor
         private double startTime;
         private IDOTweenAnimation[] currentPlayAnimations;
         private readonly DottDrivenProperties drivenProperties;
+        private readonly DottActivator activator = new();
 
         public bool IsPlaying => DottEditorPreview.IsPlaying;
         public float ElapsedTime => (float)(DottEditorPreview.CurrentTime - startTime);
@@ -44,6 +45,8 @@ namespace Dott.Editor
         {
             DottEditorPreview.Stop();
 
+            // Inactive targets must be enabled first, otherwise the preview is invisible
+            activator.Activate(animations);
             drivenProperties.Register(animations);
             Sort(animations).ForEach(PreviewTween);
             DottEditorPreview.GoTo(time);
@@ -56,6 +59,7 @@ namespace Dott.Editor
             Paused = false;
             DottEditorPreview.Stop();
             drivenProperties.Unregister();
+            activator.Restore();
         }
 
         public void Pause()
@@ -99,6 +103,7 @@ namespace Dott.Editor
         {
             Stop();
             drivenProperties.Dispose();
+            activator.Dispose();
             DottEditorPreview.Completed -= DottEditorPreviewOnCompleted;
         }
     }

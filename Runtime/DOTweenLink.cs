@@ -18,7 +18,7 @@ namespace Dott
             if (!timeline || !timeline.isActiveAndEnabled)
                 return null;
 
-            return timeline.Play().SetDelay(delay, asPrependedIntervalIfSequence: true);
+            return timeline.PlayFresh().SetDelay(delay, asPrependedIntervalIfSequence: true);
         }
 
         Tween IDOTweenAnimation.CreateEditorPreview()

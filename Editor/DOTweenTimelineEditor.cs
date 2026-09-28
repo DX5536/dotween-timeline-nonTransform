@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using DG.Tweening;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEditorInternal;
 using UnityEngine;
 
@@ -35,6 +36,11 @@ namespace Dott.Editor
                 view.DrawInspector(selection.GetAnimationEditor());
             }
 
+            if (Application.isPlaying)
+            {
+                DrawRuntimeControls();
+            }
+
             if (controller.Paused && Event.current.type == EventType.Repaint)
             {
                 controller.GoTo(animations, controller.ElapsedTime);
@@ -44,6 +50,25 @@ namespace Dott.Editor
             if (controller.IsPlaying || view.IsTimeDragging || view.IsTweenDragging)
             {
                 Repaint();
+            }
+        }
+
+        private void DrawRuntimeControls()
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Playback (Play Mode)", EditorStyles.boldLabel);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Play")) Timeline.Play();
+                if (GUILayout.Button("Reverse")) Timeline.PlayBackwards();
+                if (GUILayout.Button("Toggle")) Timeline.Toggle();
+            }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Pause/Resume")) Timeline.TogglePause();
+                if (GUILayout.Button("Rewind")) Timeline.Rewind();
+                if (GUILayout.Button("Complete")) Timeline.Complete();
             }
         }
 
@@ -76,6 +101,7 @@ namespace Dott.Editor
             view.InspectorDownButtonClicked += MoveSelectedDown;
 
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            EditorSceneManager.sceneSaving += OnSceneSaving;
         }
 
         private void OnDisable()
@@ -101,6 +127,7 @@ namespace Dott.Editor
             view.InspectorDownButtonClicked -= MoveSelectedDown;
 
             EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+            EditorSceneManager.sceneSaving -= OnSceneSaving;
 
             controller.Dispose();
             controller = null;
@@ -279,6 +306,12 @@ namespace Dott.Editor
             {
                 ComponentUtility.MoveComponentDown(selection.Animation.Component);
             }
+        }
+
+        private void OnSceneSaving(UnityEngine.SceneManagement.Scene scene, string path)
+        {
+            // Don't save preview state (tweened values, temporarily activated objects) into the scene
+            controller.Stop();
         }
 
         private void OnPlayModeStateChanged(PlayModeStateChange stateChange)

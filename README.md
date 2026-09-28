@@ -96,3 +96,28 @@ Feel free to ask questions and share thoughts in [Discussions](https://github.co
 
 **This project is inspired by:**\
 [Animation Creator Timeline (UI Tween)](https://assetstore.unity.com/packages/tools/animation/animation-creator-timeline-ui-tween-186589)\, [DOTween Timeline Preview](https://www.youtube.com/watch?v=hrX0xZ3JCXU) & [Jitter](https://jitter.video/)
+
+## Fork additions
+
+### DOTween Property (tween any value)
+Add it from the timeline **Add** dropdown (**Add Property**) or via **DOTween > DOTween Property**.
+1. Drop a GameObject, component or ScriptableObject on **Target**.
+2. Pick the **Component** to tween (Transform / RectTransform first; ScriptableObjects referenced by those components are listed too).
+3. Pick the **Property**: any public or `[SerializeField]` number (int/float/double/...), `Vector2/3/4`, `Color` or `string` member, e.g. `Slider.value`, TMP `fontSize`, `maxVisibleCharacters`, `text` (typewriter/scramble) or `stats.health` inside a ScriptableObject. Public properties with a setter work too.
+
+Options: Custom From, Relative, ease / custom curve, loops.
+
+### Preview of inactive objects
+Inactive targets (and their inactive parents) are enabled while the timeline preview runs and restored when it stops. The preview also stops on scene save.
+
+### Playback and reverse
+```c#
+timeline.Play();                 // forward, restarts if finished
+timeline.PlayBackwards();        // from the current position
+timeline.PlayBackwardsFromEnd(); // jump to the end, then play in reverse
+timeline.Toggle();               // forward <-> backwards
+timeline.Restart(); timeline.Rewind(); timeline.SmoothRewind(); timeline.Complete();
+timeline.Pause(); timeline.Resume(); timeline.TogglePause(); timeline.Flip(); timeline.GoTo(0.5f);
+```
+`DO*` void wrappers (`DOPlayBackwards`, `DOToggle`, `DORewind`, ...) can be used from UnityEvents. The timeline Player has a **Direction** option, and the inspector shows playback buttons in Play Mode.
+The generated sequence is now kept after completing (`SetAutoKill(false)`) so it can be reversed and replayed; call `Kill()` to rebuild it.

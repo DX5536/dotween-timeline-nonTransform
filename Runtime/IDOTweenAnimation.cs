@@ -25,6 +25,9 @@ namespace Dott
         [CanBeNull] Tween CreateEditorPreview();
         [ItemCanBeNull] IEnumerable<Object> Targets { get; }
 
+        // Objects that must be active in the hierarchy while previewing (inactive ones are temporarily enabled)
+        IEnumerable<Object> PreviewActivationTargets => Targets;
+
         #endregion
     }
 }
