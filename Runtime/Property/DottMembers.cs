@@ -187,7 +187,18 @@ namespace Dott
             if (field.IsStatic || field.IsInitOnly || field.IsLiteral) return false;
             if (field.IsNotSerialized) return false;
             if (field.IsDefined(typeof(ObsoleteAttribute), true)) return false;
-            return field.IsPublic || field.IsDefined(typeof(SerializeField), true);
+            if (field.IsPublic) return true;
+
+            // Private fields of Unity's own components (m_Color, m_FillAmount...) can be changed, but the component is not
+            // notified, so nothing visibly happens. Their public properties (color, fillAmount...) are the ones to tween.
+            return field.IsDefined(typeof(SerializeField), true) && !IsEngineType(field.DeclaringType);
+        }
+
+        private static bool IsEngineType(Type type)
+        {
+            var assemblyName = type.Assembly.GetName().Name;
+            return assemblyName.StartsWith("UnityEngine") || assemblyName.StartsWith("UnityEditor") ||
+                   assemblyName.StartsWith("Unity.") || assemblyName.StartsWith("System") || assemblyName == "mscorlib";
         }
 
         private static bool IsNestedSerializable(Type type)

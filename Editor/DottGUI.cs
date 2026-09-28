@@ -23,6 +23,18 @@ namespace Dott.Editor
             Color.yellow, Color.cyan, Color.magenta
         };
 
+        public static float RowHeight => ROW_HEIGHT;
+
+        // The default (random but stable) color of a tween block
+        public static Color DefaultColor(IDOTweenAnimation animation)
+        {
+            var state = Random.state;
+            Random.InitState(animation.Component.GetInstanceID());
+            var color = Colors.GetRandom();
+            Random.state = state;
+            return color;
+        }
+
         public static Rect GetTimelineControlRect(int tweenCount)
         {
             return EditorGUILayout.GetControlRect(false, TIMELINE_HEADER_HEIGHT + TIME_HEIGHT + tweenCount * ROW_HEIGHT + BOTTOM_HEIGHT);
@@ -158,7 +170,7 @@ namespace Dott.Editor
             return time;
         }
 
-        public static Rect Tweens(Rect rect, IDOTweenAnimation[] animations, float timeScale, [CanBeNull] IDOTweenAnimation selected, ref bool isTweenDragging, Action<IDOTweenAnimation> tweenSelected)
+        public static Rect Tweens(Rect rect, IDOTweenAnimation[] animations, float timeScale, [CanBeNull] IDOTweenAnimation selected, ref bool isTweenDragging, Action<IDOTweenAnimation> tweenSelected, Func<IDOTweenAnimation, Color?> colorProvider)
         {
             rect = rect.ShiftY(TIMELINE_HEADER_HEIGHT + TIME_HEIGHT).SetHeight(animations.Length * ROW_HEIGHT);
 
@@ -169,7 +181,7 @@ namespace Dott.Editor
                 var animation = animations[i];
                 var rowRect = new Rect(rect.x, rect.y + i * ROW_HEIGHT, rect.width, ROW_HEIGHT);
                 var isSelected = selected?.Component == animation.Component;
-                var tweenRect = Element(animation, rowRect, isSelected, timeScale);
+                var tweenRect = Element(animation, rowRect, isSelected, timeScale, colorProvider?.Invoke(animation));
 
                 ProcessDragEvents(tweenRect, ref isTweenDragging, start: Start, end: null);
 
@@ -187,17 +199,17 @@ namespace Dott.Editor
             return rect;
         }
 
-        private static Rect Element(IDOTweenAnimation animation, Rect rowRect, bool isSelected, float timeScale)
+        private static Rect Element(IDOTweenAnimation animation, Rect rowRect, bool isSelected, float timeScale, Color? customColor)
         {
             if (animation.CallbackView)
             {
-                return Callback(animation, rowRect, isSelected, timeScale);
+                return Callback(animation, rowRect, isSelected, timeScale, customColor);
             }
 
-            return Tween(animation, rowRect, isSelected, timeScale);
+            return Tween(animation, rowRect, isSelected, timeScale, customColor);
         }
 
-        private static Rect Callback(IDOTweenAnimation animation, Rect rowRect, bool isSelected, float timeScale)
+        private static Rect Callback(IDOTweenAnimation animation, Rect rowRect, bool isSelected, float timeScale, Color? customColor)
         {
             void Label(Rect rect, GUIContent content, GUIStyle style)
             {
@@ -206,14 +218,14 @@ namespace Dott.Editor
 
             void Icon(bool isHovered, Rect iconRect)
             {
-                var iconColor = Color.white.SetAlpha(0.6f);
+                var iconColor = customColor ?? Color.white.SetAlpha(0.6f);
                 if (isSelected)
                 {
                     iconColor = new Color(0.2f, 0.6f, 1f);
                 }
                 else if (isHovered)
                 {
-                    iconColor = Color.white.SetAlpha(0.5f);
+                    iconColor = customColor?.SetAlpha(0.8f) ?? Color.white.SetAlpha(0.5f);
                 }
 
                 var icon = animation.CustomIcon ?? IconCallback;
@@ -264,7 +276,7 @@ namespace Dott.Editor
             return rect;
         }
 
-        private static Rect Tween(IDOTweenAnimation animation, Rect rowRect, bool isSelected, float timeScale)
+        private static Rect Tween(IDOTweenAnimation animation, Rect rowRect, bool isSelected, float timeScale, Color? customColor)
         {
             var isInfinite = animation.Loops == -1;
             var loops = Mathf.Max(1, animation.Loops);
@@ -278,6 +290,10 @@ namespace Dott.Editor
             var alphaMultiplier = animation.IsActive ? 1f : 0.4f;
 
             RoundRect(tweenRect, Color.gray.SetAlpha(0.3f * alphaMultiplier), borderRadius: 4);
+            if (customColor.HasValue)
+            {
+                RoundRect(tweenRect, customColor.Value.SetAlpha(0.75f * alphaMultiplier), borderRadius: 4);
+            }
 
             var mouseHover = tweenRect.Contains(Event.current.mousePosition);
             if (isSelected)
@@ -293,16 +309,17 @@ namespace Dott.Editor
             }
 
             var colorLine = new Rect(tweenRect.x + 1, tweenRect.y + tweenRect.height - 3, tweenRect.width - 2, 2);
-            Random.InitState(animation.Component.GetInstanceID());
-            var color = Colors.GetRandom();
-            EditorGUI.DrawRect(colorLine, color.SetAlpha(0.6f * alphaMultiplier));
+            var color = customColor ?? DefaultColor(animation);
+            EditorGUI.DrawRect(colorLine, color.SetAlpha((customColor.HasValue ? 1f : 0.6f) * alphaMultiplier));
 
             var label = new GUIContent(animation.Label);
+            // Keep the label readable on bright custom colors
+            var textColor = customColor.HasValue && customColor.Value.grayscale > 0.6f ? Color.black : Color.white;
             var style = new GUIStyle(GUI.skin.label)
             {
                 fontStyle = FontStyle.Bold, fontSize = 10,
                 alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = Color.white.SetAlpha(alphaMultiplier) }
+                normal = { textColor = textColor.SetAlpha(alphaMultiplier) }
             };
             var labelWidth = style.CalcSize(label).x;
             var labelRect = tweenRect;
@@ -431,6 +448,34 @@ namespace Dott.Editor
             var buttonRect = new Rect(position, buttonSize);
 
             return GUI.Button(buttonRect, "Delete");
+        }
+
+        /// <summary>Color swatch (and reset button) for the selected block, placed left of the Duplicate button.</summary>
+        public static Color? BlockColorControls(Rect rect, Color current, bool hasCustomColor, out bool reset)
+        {
+            const float swatchWidth = 36;
+            const float resetWidth = 20;
+            var y = rect.y + rect.height - BOTTOM_HEIGHT + (BOTTOM_HEIGHT - 24) / 2;
+            var duplicateX = rect.x + rect.width - 66 - (BOTTOM_HEIGHT - 24) / 2 - 50 - 2;
+
+            var swatchRect = new Rect(duplicateX - 6 - swatchWidth, y + 2, swatchWidth, 20);
+            var result = (Color?)null;
+
+            EditorGUI.BeginChangeCheck();
+            var picked = EditorGUI.ColorField(swatchRect, new GUIContent(string.Empty, "Block color"), current, showEyedropper: false, showAlpha: false, hdr: false);
+            if (EditorGUI.EndChangeCheck())
+            {
+                result = picked;
+            }
+
+            reset = false;
+            if (hasCustomColor)
+            {
+                var resetRect = new Rect(swatchRect.x - 2 - resetWidth, y, resetWidth, 24);
+                reset = GUI.Button(resetRect, new GUIContent("×", "Reset to the default color"));
+            }
+
+            return result;
         }
 
         public static bool DuplicateButton(Rect rect)

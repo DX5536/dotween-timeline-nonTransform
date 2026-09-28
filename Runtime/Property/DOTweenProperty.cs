@@ -14,6 +14,8 @@ namespace Dott
         [SerializeField] public string id;
         [SerializeField] public bool isActive = true;
 
+        // Use the components of this GameObject (like SELF in DOTween Pro)
+        [SerializeField] public bool useSelf;
         // The object as it was dropped in the inspector (GameObject, Component or ScriptableObject)
         [SerializeField] public Object dropTarget;
         // The component / ScriptableObject that owns the tweened member

@@ -47,7 +47,8 @@ namespace Dott.Editor
                 serializedObject.FindProperty("dropTarget"),
                 serializedObject.FindProperty("target"),
                 serializedObject.FindProperty("propertyPath"),
-                filter: null, targetLabel: "Target");
+                filter: null, targetLabel: "Target",
+                serializedObject.FindProperty("useSelf"), ((Component)target).gameObject);
 
             var pathProp = serializedObject.FindProperty("propertyPath");
             var entry = mainPicker.FindEntry(pathProp.stringValue);
@@ -104,12 +105,31 @@ namespace Dott.Editor
 
             /// <returns>True if the selected property was changed by the user.</returns>
             public bool Draw(SerializedProperty dropProp, SerializedProperty targetProp, SerializedProperty pathProp,
-                Func<DottMembers.Entry, bool> filter, string targetLabel)
+                Func<DottMembers.Entry, bool> filter, string targetLabel, SerializedProperty selfProp, GameObject selfGo)
             {
                 var pathChanged = false;
 
                 EditorGUI.BeginChangeCheck();
-                EditorGUILayout.PropertyField(dropProp, new GUIContent(targetLabel, "Drop a GameObject, Component or ScriptableObject"));
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    var selfTooltip = "SELF: use the components of this GameObject";
+                    var self = GUILayout.Toggle(selfProp.boolValue, new GUIContent("SELF", selfTooltip), EditorStyles.miniButton, GUILayout.Width(44));
+                    if (self != selfProp.boolValue)
+                    {
+                        selfProp.boolValue = self;
+                        if (self) { dropProp.objectReferenceValue = selfGo; }
+                    }
+
+                    if (selfProp.boolValue)
+                    {
+                        EditorGUILayout.LabelField("Will animate components on this GameObject", EditorStyles.miniLabel);
+                    }
+                    else
+                    {
+                        EditorGUILayout.PropertyField(dropProp, new GUIContent(targetLabel, "Drop a GameObject, Component or ScriptableObject"));
+                    }
+                }
+
                 if (EditorGUI.EndChangeCheck())
                 {
                     var dropped = dropProp.objectReferenceValue;
@@ -329,7 +349,8 @@ namespace Dott.Editor
             var indent = EditorGUI.indentLevel;
             EditorGUI.indentLevel++;
             picker.Draw(sourceProp.FindPropertyRelative("dropTarget"), sourceProp.FindPropertyRelative("target"),
-                sourceProp.FindPropertyRelative("propertyPath"), candidate => candidate.Kind == entry.Kind, "Object");
+                sourceProp.FindPropertyRelative("propertyPath"), candidate => candidate.Kind == entry.Kind, "Object",
+                sourceProp.FindPropertyRelative("useSelf"), ((Component)target).gameObject);
             EditorGUI.indentLevel = indent;
 
             if (string.IsNullOrEmpty(sourceProp.FindPropertyRelative("propertyPath").stringValue))

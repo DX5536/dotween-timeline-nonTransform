@@ -12,6 +12,8 @@ namespace Dott
     public class DottValueSource
     {
         public bool useReference;
+        // Use the components of the GameObject this timeline is on
+        public bool useSelf;
         // The object as it was dropped in the inspector (GameObject, Component or ScriptableObject)
         public Object dropTarget;
         // The component / ScriptableObject that owns the member

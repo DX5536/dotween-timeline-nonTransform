@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using DG.Tweening;
 using JetBrains.Annotations;
 using UnityEngine;
@@ -8,6 +10,45 @@ namespace Dott
     public class DOTweenTimeline : MonoBehaviour
     {
         [CanBeNull] public Sequence Sequence { get; private set; }
+
+        #region Block colors (editor only: lets artists color code the timeline blocks)
+
+        [Serializable]
+        private struct BlockColor
+        {
+            public Component component;
+            public Color color;
+        }
+
+        [SerializeField, HideInInspector] private List<BlockColor> blockColors = new();
+
+        public bool TryGetBlockColor(Component component, out Color color)
+        {
+            foreach (var entry in blockColors)
+            {
+                if (entry.component == component)
+                {
+                    color = entry.color;
+                    return true;
+                }
+            }
+
+            color = default;
+            return false;
+        }
+
+        /// <summary>Sets the color of the timeline block of <paramref name="component"/>, or resets it to the default with null.</summary>
+        public void SetBlockColor(Component component, Color? color)
+        {
+            // Drop entries of removed components
+            blockColors.RemoveAll(entry => entry.component == null || entry.component == component);
+            if (color.HasValue)
+            {
+                blockColors.Add(new BlockColor { component = component, color = color.Value });
+            }
+        }
+
+        #endregion
 
         public bool IsPlaying => Sequence != null && Sequence.IsActive() && Sequence.IsPlaying();
         public bool IsBackwards => Sequence != null && Sequence.IsActive() && Sequence.IsBackwards();

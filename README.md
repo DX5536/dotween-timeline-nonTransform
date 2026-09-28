@@ -126,3 +126,8 @@ The generated sequence is now kept after completing (`SetAutoKill(false)`) so it
 - **Custom From** gives both a From and a To value for any property (Move, Color, Scale, Slider value...). **Relative** adds the To value to the start value.
 - Vector and color members also list single channels, e.g. `localPosition.x` or `color.a` (a fade that leaves RGB untouched).
 - **Ref**: the From / To value can be read from a property of another object instead of typed in (e.g. `Slider.minValue` / `Slider.maxValue`). Timelines with Ref values are rebuilt before each forward `Play()` / `Restart()`, so changes made in between are picked up.
+
+### Artist workflow
+- **Reorder blocks:** drag a block up or down over another row to change the order (same as the Inspector up/down arrows, but visual).
+- **Block colors:** select a block and use the color swatch next to Duplicate (the x resets it). Works for every block type, including DOTween Pro tweens; colors are stored on the DOTween Timeline component.
+- **SELF:** DOTween Property has a SELF toggle (also for Ref values) to use the components on the same GameObject as the timeline, so no separate manager object is needed.
