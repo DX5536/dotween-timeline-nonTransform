@@ -17,8 +17,18 @@ namespace Dott.Editor
             public string Label;
         }
 
-        private static readonly string[] EaseNames = CreateEaseNames(out EaseIndices);
-        private static int[] EaseIndices;
+        // Created lazily: NicifyVariableName can't be called while the Editor (a ScriptableObject) is being constructed
+        private static string[] easeNames;
+        private static int[] easeIndices;
+        private static string[] EaseNames => easeNames ??= CreateEaseNames(out easeIndices);
+        private static int[] EaseIndices
+        {
+            get
+            {
+                if (easeIndices == null) { easeNames = CreateEaseNames(out easeIndices); }
+                return easeIndices;
+            }
+        }
 
         private List<ComponentOption> componentOptions = new();
         private int componentCacheKey;
@@ -405,7 +415,6 @@ namespace Dott.Editor
             }
 
             indices = visible.ToArray();
-            EaseIndices = indices;
             return visible.Select(i => ObjectNames.NicifyVariableName(names[i])).ToArray();
         }
 
