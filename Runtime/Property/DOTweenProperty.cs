@@ -40,6 +40,10 @@ namespace Dott
         [SerializeField] public string fromString;
         [SerializeField] public string toString;
 
+        // Optional live values (e.g. Slider.minValue / maxValue) that replace the constants above
+        [SerializeField] public DottValueSource fromSource = new();
+        [SerializeField] public DottValueSource toSource = new();
+
         [SerializeField] public bool richText = true;
         [SerializeField] public ScrambleMode scrambleMode = ScrambleMode.None;
         [SerializeField] public string scrambleChars;
@@ -112,38 +116,38 @@ namespace Dott
             {
                 case DottValueKind.Number:
                 {
-                    var from = fromNumber;
-                    result = DOTween.To(() => custom ? from : acc.GetNumber(), acc.SetNumber, toNumber, duration);
+                    var from = fromSource.ResolveNumber(fromNumber);
+                    result = DOTween.To(() => custom ? from : acc.GetNumber(), acc.SetNumber, toSource.ResolveNumber(toNumber), duration);
                     break;
                 }
                 case DottValueKind.Vector2:
                 {
-                    var from = (Vector2)fromVector;
-                    result = DOTween.To(() => custom ? from : (Vector2)acc.Get(), v => acc.Set(v), (Vector2)toVector, duration);
+                    var from = fromSource.Resolve((Vector2)fromVector);
+                    result = DOTween.To(() => custom ? from : (Vector2)acc.Get(), v => acc.Set(v), toSource.Resolve((Vector2)toVector), duration);
                     break;
                 }
                 case DottValueKind.Vector3:
                 {
-                    var from = (Vector3)fromVector;
-                    result = DOTween.To(() => custom ? from : (Vector3)acc.Get(), v => acc.Set(v), (Vector3)toVector, duration);
+                    var from = fromSource.Resolve((Vector3)fromVector);
+                    result = DOTween.To(() => custom ? from : (Vector3)acc.Get(), v => acc.Set(v), toSource.Resolve((Vector3)toVector), duration);
                     break;
                 }
                 case DottValueKind.Vector4:
                 {
-                    var from = fromVector;
-                    result = DOTween.To(() => custom ? from : (Vector4)acc.Get(), v => acc.Set(v), toVector, duration);
+                    var from = fromSource.Resolve(fromVector);
+                    result = DOTween.To(() => custom ? from : (Vector4)acc.Get(), v => acc.Set(v), toSource.Resolve(toVector), duration);
                     break;
                 }
                 case DottValueKind.Color:
                 {
-                    var from = fromColor;
-                    result = DOTween.To(() => custom ? from : (Color)acc.Get(), v => acc.Set(v), toColor, duration);
+                    var from = fromSource.Resolve(fromColor);
+                    result = DOTween.To(() => custom ? from : (Color)acc.Get(), v => acc.Set(v), toSource.Resolve(toColor), duration);
                     break;
                 }
                 case DottValueKind.String:
                 {
-                    var from = fromString ?? string.Empty;
-                    var stringTween = DOTween.To(() => custom ? from : (string)acc.Get() ?? string.Empty, v => acc.Set(v), toString ?? string.Empty, duration);
+                    var from = fromSource.Resolve(fromString) ?? string.Empty;
+                    var stringTween = DOTween.To(() => custom ? from : (string)acc.Get() ?? string.Empty, v => acc.Set(v), toSource.Resolve(toString) ?? string.Empty, duration);
                     stringTween.SetOptions(richText, scrambleMode, scrambleChars);
                     result = stringTween;
                     break;

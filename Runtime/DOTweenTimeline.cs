@@ -20,6 +20,12 @@ namespace Dott
         /// <summary>Plays the timeline forward from its current position. Restarts it if it has already finished.</summary>
         public Sequence Play()
         {
+            // Tweens that read live values (DOTween Property "Ref") are rebuilt when starting from the beginning
+            if (Sequence != null && HasDynamicValues() && !Sequence.IsPlaying() && (Sequence.IsComplete() || Sequence.Elapsed() <= 0))
+            {
+                Kill();
+            }
+
             TryGenerateSequence();
             if (Sequence.IsComplete() && !Sequence.IsBackwards())
             {
@@ -57,6 +63,11 @@ namespace Dott
 
         public Sequence Restart()
         {
+            if (Sequence != null && HasDynamicValues())
+            {
+                Kill();
+            }
+
             TryGenerateSequence();
             Sequence.Restart();
             return Sequence;
@@ -87,7 +98,24 @@ namespace Dott
         }
 
         /// <summary>Kills the generated sequence, so the next Play() rebuilds it (e.g. after changing the tweens at runtime).</summary>
-        public void Kill() => Sequence?.Kill();
+        public void Kill()
+        {
+            Sequence?.Kill();
+            Sequence = null;
+        }
+
+        private bool HasDynamicValues()
+        {
+            foreach (var component in GetComponents<MonoBehaviour>())
+            {
+                if (component is IDOTweenAnimation { IsActive: true, HasDynamicValues: true })
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         // Wrappers for UnityEvent (requires void return type)
         public void DOPlay() => Play();

@@ -121,3 +121,8 @@ timeline.Pause(); timeline.Resume(); timeline.TogglePause(); timeline.Flip(); ti
 ```
 `DO*` void wrappers (`DOPlayBackwards`, `DOToggle`, `DORewind`, ...) can be used from UnityEvents. The timeline Player has a **Direction** option, and the inspector shows playback buttons in Play Mode.
 The generated sequence is now kept after completing (`SetAutoKill(false)`) so it can be reversed and replayed; call `Kill()` to rebuild it.
+
+#### From / To, single channels and live values
+- **Custom From** gives both a From and a To value for any property (Move, Color, Scale, Slider value...). **Relative** adds the To value to the start value.
+- Vector and color members also list single channels, e.g. `localPosition.x` or `color.a` (a fade that leaves RGB untouched).
+- **Ref**: the From / To value can be read from a property of another object instead of typed in (e.g. `Slider.minValue` / `Slider.maxValue`). Timelines with Ref values are rebuilt before each forward `Play()` / `Restart()`, so changes made in between are picked up.

@@ -90,6 +90,7 @@ namespace Dott
                         if (seen.Add(path))
                         {
                             result.Add(new Entry(path, Label(prefix + CleanName(field.Name), field.FieldType), field.FieldType, kind));
+                            AddChannels(path, kind, result, seen);
                         }
 
                         continue;
@@ -134,7 +135,31 @@ namespace Dott
                     if (seen.Add(path))
                     {
                         result.Add(new Entry(path, Label(path, property.PropertyType), property.PropertyType, kind));
+                        AddChannels(path, kind, result, seen);
                     }
+                }
+            }
+        }
+
+        // Single channels of vectors and colors (position.x, color.a...) so that e.g. only the alpha can be faded
+        private static void AddChannels(string path, DottValueKind kind, List<Entry> result, HashSet<string> seen)
+        {
+            string channels;
+            switch (kind)
+            {
+                case DottValueKind.Vector2: channels = "xy"; break;
+                case DottValueKind.Vector3: channels = "xyz"; break;
+                case DottValueKind.Vector4: channels = "xyzw"; break;
+                case DottValueKind.Color: channels = "rgba"; break;
+                default: return;
+            }
+
+            foreach (var channel in channels)
+            {
+                var channelPath = $"{path}.{channel}";
+                if (seen.Add(channelPath))
+                {
+                    result.Add(new Entry(channelPath, Label(channelPath, typeof(float)), typeof(float), DottValueKind.Number));
                 }
             }
         }

@@ -27,6 +27,7 @@ namespace Dott
         }
 
         bool IDOTweenAnimation.IsActive => isActive;
+        bool IDOTweenAnimation.HasDynamicValues => fromSource.useReference || toSource.useReference;
         bool IDOTweenAnimation.IsFrom => false;
         // Needed to restore the original value when the preview stops (see CreateEditorPreview)
         bool IDOTweenAnimation.AllowEditorCallbacks => true;
