@@ -22,6 +22,9 @@ namespace Dott.Editor
         public event Action<float> TimeDrag;
         public event Action<IDOTweenAnimation> TweenSelected;
         public event Action<float> TweenDrag;
+        // Dragging a block over another row: -1 moves it up, +1 moves it down
+        public event Action<int> TweenReorder;
+        public event Action<Color?> BlockColorChanged;
         public event Action AddClicked;
         public event Action<Type> AddMore;
         public event Action RemoveClicked;
@@ -34,7 +37,7 @@ namespace Dott.Editor
         public event Action InspectorUpButtonClicked;
         public event Action InspectorDownButtonClicked;
 
-        public void DrawTimeline(IDOTweenAnimation[] animations, [CanBeNull] IDOTweenAnimation selected, bool isPlaying, float currentPlayingTime, bool isLooping, bool isPaused)
+        public void DrawTimeline(IDOTweenAnimation[] animations, [CanBeNull] IDOTweenAnimation selected, bool isPlaying, float currentPlayingTime, bool isLooping, bool isPaused, Func<IDOTweenAnimation, Color?> colorProvider)
         {
             var rect = DottGUI.GetTimelineControlRect(animations.Length);
 
@@ -44,7 +47,7 @@ namespace Dott.Editor
             TimeScale = CalculateTimeScale(animations);
             var timeDragStarted = false;
             var timeRect = DottGUI.Time(rect, TimeScale, ref isTimeDragging, () => timeDragStarted = true, TimeDragEnd);
-            var tweensRect = DottGUI.Tweens(rect, animations, TimeScale, selected, ref isTweenDragging, TweenSelected);
+            var tweensRect = DottGUI.Tweens(rect, animations, TimeScale, selected, ref isTweenDragging, TweenSelected, colorProvider);
 
             if (DottGUI.AddButton(rect))
             {
@@ -61,6 +64,20 @@ namespace Dott.Editor
             if (selected != null && DottGUI.DuplicateButton(rect))
             {
                 DuplicateClicked?.Invoke();
+            }
+
+            if (selected != null)
+            {
+                var customColor = colorProvider?.Invoke(selected);
+                var newColor = DottGUI.BlockColorControls(rect, customColor ?? DottGUI.DefaultColor(selected), customColor.HasValue, out var resetColor);
+                if (resetColor)
+                {
+                    BlockColorChanged?.Invoke(null);
+                }
+                else if (newColor.HasValue)
+                {
+                    BlockColorChanged?.Invoke(newColor);
+                }
             }
 
             if (isPlaying || isPaused)
@@ -96,6 +113,19 @@ namespace Dott.Editor
                 {
                     var rawTime = time / TimeScale;
                     TweenDrag?.Invoke(rawTime);
+
+                    // Dragging vertically over another row changes the order of the blocks
+                    var selectedIndex = Array.FindIndex(animations, animation => animation.Component == selected.Component);
+                    var row = (Event.current.mousePosition.y - tweensRect.y) / DottGUI.RowHeight;
+                    const float margin = 0.25f;
+                    if (row < selectedIndex - margin && selectedIndex > 0)
+                    {
+                        TweenReorder?.Invoke(-1);
+                    }
+                    else if (row > selectedIndex + 1 + margin && selectedIndex < animations.Length - 1)
+                    {
+                        TweenReorder?.Invoke(1);
+                    }
                 }
             }
 

@@ -25,6 +25,12 @@ namespace Dott
         [CanBeNull] Tween CreateEditorPreview();
         [ItemCanBeNull] IEnumerable<Object> Targets { get; }
 
+        // True if the tween reads values from other objects, so it must be rebuilt before each forward play
+        bool HasDynamicValues => false;
+
+        // Objects that must be active in the hierarchy while previewing (inactive ones are temporarily enabled)
+        IEnumerable<Object> PreviewActivationTargets => Targets;
+
         #endregion
     }
 }

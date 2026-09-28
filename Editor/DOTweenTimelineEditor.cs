@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using DG.Tweening;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEditorInternal;
 using UnityEngine;
 
@@ -28,11 +29,16 @@ namespace Dott.Editor
             selection.Validate(animations);
 
             view.DrawTimeline(animations, selection.Animation, controller.IsPlaying, controller.ElapsedTime,
-                controller.Loop, controller.Paused);
+                controller.Loop, controller.Paused, GetBlockColor);
 
             if (selection.Animation != null)
             {
                 view.DrawInspector(selection.GetAnimationEditor());
+            }
+
+            if (Application.isPlaying)
+            {
+                DrawRuntimeControls();
             }
 
             if (controller.Paused && Event.current.type == EventType.Repaint)
@@ -47,6 +53,25 @@ namespace Dott.Editor
             }
         }
 
+        private void DrawRuntimeControls()
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Playback (Play Mode)", EditorStyles.boldLabel);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Play")) Timeline.Play();
+                if (GUILayout.Button("Reverse")) Timeline.PlayBackwards();
+                if (GUILayout.Button("Toggle")) Timeline.Toggle();
+            }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Pause/Resume")) Timeline.TogglePause();
+                if (GUILayout.Button("Rewind")) Timeline.Rewind();
+                if (GUILayout.Button("Complete")) Timeline.Complete();
+            }
+        }
+
         private void OnEnable()
         {
             controller = new DottController();
@@ -57,6 +82,8 @@ namespace Dott.Editor
 
             view.TweenSelected += OnTweenSelected;
             view.TweenDrag += DragSelectedAnimation;
+            view.TweenReorder += MoveSelected;
+            view.BlockColorChanged += SetSelectedBlockColor;
 
             view.TimeDragEnd += OnTimeDragEnd;
             view.TimeDrag += GoTo;
@@ -76,12 +103,15 @@ namespace Dott.Editor
             view.InspectorDownButtonClicked += MoveSelectedDown;
 
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            EditorSceneManager.sceneSaving += OnSceneSaving;
         }
 
         private void OnDisable()
         {
             view.TweenSelected -= OnTweenSelected;
             view.TweenDrag -= DragSelectedAnimation;
+            view.TweenReorder -= MoveSelected;
+            view.BlockColorChanged -= SetSelectedBlockColor;
 
             view.TimeDragEnd -= OnTimeDragEnd;
             view.TimeDrag -= GoTo;
@@ -101,6 +131,7 @@ namespace Dott.Editor
             view.InspectorDownButtonClicked -= MoveSelectedDown;
 
             EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+            EditorSceneManager.sceneSaving -= OnSceneSaving;
 
             controller.Dispose();
             controller = null;
@@ -241,6 +272,12 @@ namespace Dott.Editor
             EditorUtility.CopySerialized(source, dest);
 
             var animation = DottAnimation.FromComponent(dest);
+            if (Timeline.TryGetBlockColor(source, out var sourceColor))
+            {
+                Undo.RecordObject(Timeline, "Duplicate block color");
+                Timeline.SetBlockColor(dest, sourceColor);
+            }
+
             selection.Set(animation);
 
             var components = source.GetComponents<Component>();
@@ -263,22 +300,40 @@ namespace Dott.Editor
             EditorPrefs.SetBool("Dott.Snap", view.IsSnapping);
         }
 
-        private void MoveSelectedUp()
+        private void MoveSelectedUp() => MoveSelected(-1);
+        private void MoveSelectedDown() => MoveSelected(1);
+
+        // Moves the selected animation past its neighbour in the timeline (skipping components that are not animations)
+        private void MoveSelected(int direction)
         {
-            var index = animations.FindIndex(animation => animation.Component == selection.Animation.Component);
-            if (index > 0)
+            var component = selection.Animation.Component;
+            var index = animations.FindIndex(animation => animation.Component == component);
+            var neighborIndex = index + direction;
+            if (index < 0 || neighborIndex < 0 || neighborIndex >= animations.Length) { return; }
+
+            var components = component.GetComponents<Component>();
+            var steps = Math.Abs(Array.IndexOf(components, animations[neighborIndex].Component) - Array.IndexOf(components, component));
+            for (var i = 0; i < steps; i++)
             {
-                ComponentUtility.MoveComponentUp(selection.Animation.Component);
+                if (direction < 0) ComponentUtility.MoveComponentUp(component);
+                else ComponentUtility.MoveComponentDown(component);
             }
         }
 
-        private void MoveSelectedDown()
+        private Color? GetBlockColor(IDOTweenAnimation animation) =>
+            Timeline.TryGetBlockColor(animation.Component, out var color) ? color : null;
+
+        private void SetSelectedBlockColor(Color? color)
         {
-            var index = animations.FindIndex(animation => animation.Component == selection.Animation.Component);
-            if (index < animations.Length - 1)
-            {
-                ComponentUtility.MoveComponentDown(selection.Animation.Component);
-            }
+            Undo.RecordObject(Timeline, "Change block color");
+            Timeline.SetBlockColor(selection.Animation.Component, color);
+            EditorUtility.SetDirty(Timeline);
+        }
+
+        private void OnSceneSaving(UnityEngine.SceneManagement.Scene scene, string path)
+        {
+            // Don't save preview state (tweened values, temporarily activated objects) into the scene
+            controller.Stop();
         }
 
         private void OnPlayModeStateChanged(PlayModeStateChange stateChange)

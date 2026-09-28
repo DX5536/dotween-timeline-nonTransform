@@ -11,7 +11,7 @@ A pocket timeline solution for DOTween Pro. Configure and organize complex tween
 
 ### Releases page
 Easiest way is to install DOTween Timeline as an asset package.
-1. Download the latest ```.unitypackage``` file from the [Releases page](https://github.com/medvejut/dotween-timeline/releases).
+1. Download the latest ```.unitypackage``` file from the [Releases page](https://github.com/DX5536/dotween-timeline-nonTransform/releases).
 2. Import it into your project via **Assets > Import Package > Custom Package**.
 
 ### Git UPM
@@ -20,7 +20,7 @@ You can also install this package via Git URL using Unity Package Manager.
   Open **Tools > Demigiant > DOTween Utility Panel**, click **Create ASMDEF**
 2. Then, add the following line to your `Packages/manifest.json`:
 ```
-"com.medvejut.dotweentimeline": "https://github.com/medvejut/dotween-timeline.git#upm"
+"com.dx5536.dotweentimeline": "https://github.com/DX5536/dotween-timeline-nonTransform.git#upm"
 ```
 
 ## How to use
@@ -96,3 +96,38 @@ Feel free to ask questions and share thoughts in [Discussions](https://github.co
 
 **This project is inspired by:**\
 [Animation Creator Timeline (UI Tween)](https://assetstore.unity.com/packages/tools/animation/animation-creator-timeline-ui-tween-186589)\, [DOTween Timeline Preview](https://www.youtube.com/watch?v=hrX0xZ3JCXU) & [Jitter](https://jitter.video/)
+
+## Fork additions
+
+### DOTween Property (tween any value)
+Add it from the timeline **Add** dropdown (**Add Property**) or via **DOTween > DOTween Property**.
+1. Drop a GameObject, component or ScriptableObject on **Target**.
+2. Pick the **Component** to tween (Transform / RectTransform first; ScriptableObjects referenced by those components are listed too).
+3. Pick the **Property**: any public or `[SerializeField]` number (int/float/double/...), `Vector2/3/4`, `Color` or `string` member, e.g. `Slider.value`, TMP `fontSize`, `maxVisibleCharacters`, `text` (typewriter/scramble) or `stats.health` inside a ScriptableObject. Public properties with a setter work too.
+
+Options: Custom From, Relative, ease / custom curve, loops.
+
+### Preview of inactive objects
+Inactive targets (and their inactive parents) are enabled while the timeline preview runs and restored when it stops. The preview also stops on scene save.
+
+### Playback and reverse
+```c#
+timeline.Play();                 // forward, restarts if finished
+timeline.PlayBackwards();        // from the current position
+timeline.PlayBackwardsFromEnd(); // jump to the end, then play in reverse
+timeline.Toggle();               // forward <-> backwards
+timeline.Restart(); timeline.Rewind(); timeline.SmoothRewind(); timeline.Complete();
+timeline.Pause(); timeline.Resume(); timeline.TogglePause(); timeline.Flip(); timeline.GoTo(0.5f);
+```
+`DO*` void wrappers (`DOPlayBackwards`, `DOToggle`, `DORewind`, ...) can be used from UnityEvents. The timeline Player has a **Direction** option, and the inspector shows playback buttons in Play Mode.
+The generated sequence is now kept after completing (`SetAutoKill(false)`) so it can be reversed and replayed; call `Kill()` to rebuild it.
+
+#### From / To, single channels and live values
+- **Custom From** gives both a From and a To value for any property (Move, Color, Scale, Slider value...). **Relative** adds the To value to the start value.
+- Vector and color members also list single channels, e.g. `localPosition.x` or `color.a` (a fade that leaves RGB untouched).
+- **Ref**: the From / To value can be read from a property of another object instead of typed in (e.g. `Slider.minValue` / `Slider.maxValue`). Timelines with Ref values are rebuilt before each forward `Play()` / `Restart()`, so changes made in between are picked up.
+
+### Artist workflow
+- **Reorder blocks:** drag a block up or down over another row to change the order (same as the Inspector up/down arrows, but visual).
+- **Block colors:** select a block and use the color swatch next to Duplicate (the x resets it). Works for every block type, including DOTween Pro tweens; colors are stored on the DOTween Timeline component.
+- **SELF:** DOTween Property has a SELF toggle (also for Ref values) to use the components on the same GameObject as the timeline, so no separate manager object is needed.

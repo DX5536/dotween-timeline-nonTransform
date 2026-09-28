@@ -1,8 +1,8 @@
 {
-  "name": "com.medvejut.dotweentimeline",
-  "displayName": "DOTween Timeline",
-  "version": "1.0.8",
-  "description": "Timeline component for DOTween Pro.",
+  "name": "com.dx5536.dotweentimeline",
+  "displayName": "DOTween Timeline (nonTransform)",
+  "version": "1.1.0",
+  "description": "Timeline component for DOTween Pro. Fork of medvejut/dotween-timeline that adds tweening of any component or ScriptableObject value, inactive object preview, playback / reverse API, block colors and reordering.",
   "author": {
     "name": "medvejut",
     "url": "https://github.com/medvejut"
